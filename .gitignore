@@ -1,3 +1,5 @@
+netxms-server-data*/**
+netxms-data*/**
 *venv*
 *.vscode*
 

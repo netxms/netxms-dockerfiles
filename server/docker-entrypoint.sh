@@ -1,28 +1,64 @@
 #!/bin/bash
 
-if [ ! -e "/data/.initialized" ];
+# https://wiki.netxms.org/wiki/Server_Configuration_File
+
+netxmsd_conf=/data/netxmsd.conf
+netxmsd_db_path=/data/netxms.db
+netxmsd_log_file=/data/netxms.log
+netxmsd_data_directory=/data/netxms
+netxmsd_predefined_templates=/data/predefined-templates
+
+if [ ! -f "${netxmsd_conf}" ];
 then
-	echo "Generating NetXMS server config file /etc/netxmsd.conf"
-	echo -e "Logfile=/data/netxms.log\nDBDriver=sqlite.ddr\nDBName=/data/netxms.db\n" >/etc/netxmsd.conf
-	echo "$NETXMS_CONFIG" >> /etc/netxmsd.conf
+    echo "Generating NetXMS server config file ${netxmsd_conf}"
+    cat > ${netxmsd_conf} <<EOL
+DBDriver=sqlite.ddr
+DBName=${netxmsd_db_path}
+Logfile=${netxmsd_log_file}
+DataDirectory=${netxmsd_data_directory}
+${NETXMSD_CONFIG}
+EOL
 
-	echo "Initializing NetXMS SQLLite database"
-	nxdbmgr init /usr/share/netxms/sql/dbinit_sqlite.sql
-
-	echo -e "[supervisord]\nnodaemon=true\n[program:netxms-server]\ncommand=/usr/bin/netxmsd -q\n" >/etc/supervisor/conf.d/supervisord.conf
-
-	[ "$NETXMS_STARTAGENT" -gt 0 ] && echo -e "[program:netxms-nxagent]\ncommand=/nxagent.sh\n" >>/etc/supervisor/conf.d/supervisord.conf
-
-	touch /data/.initialized
 fi
 
-# Fix SMS kannel Drv
-export LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libcurl.so.4
-if [ "$NETXMS_UNLOCKONSTARTUP" -gt 0 ];
-then
-	echo "Unlocking database"
-	echo "Y"|nxdbmgr unlock
+if [ ! -d "${netxmsd_data_directory}" ]; then
+    cp -ar /var/lib/netxms/ ${netxmsd_data_directory}
 fi
 
-exec /usr/bin/supervisord -c /etc/supervisor/conf.d/supervisord.conf
+if [ ! -d "${netxmsd_predefined_templates}" ]; then
+    cp -ar /usr/share/netxms/default-templates/ ${netxmsd_predefined_templates}
+fi
 
+if [ ! -f "${netxmsd_db_path}" ]; then
+    echo "Initializing NetXMS SQLLite database"
+    nxdbmgr -c ${netxmsd_conf} init /usr/share/netxms/sql/dbinit_sqlite.sql
+fi
+
+if [ "${NETXMSD_UNLOCK_ON_STARTUP}" -gt 0 ]; then
+    echo "Unlocking database"
+    echo "Y" | nxdbmgr -c ${netxmsd_conf} unlock
+fi
+
+if [ "${NETXMSD_UPGRADE_ON_STARTUP}" -gt 0 ]; then
+    echo "Upgrading database"
+    nxdbmgr ${NETXMSD_UPGRADE_PARAMS} -c ${netxmsd_conf} upgrade
+fi
+
+# Usage: netxmsd [<options>]
+# 
+# Valid options are:
+#    -e          : Run database check on startup
+#    -c <file>   : Set non-default configuration file
+#    -d          : Run as daemon/service
+#    -D <level>  : Set debug level (valid levels are 0..9)
+#    -h          : Display help and exit
+#    -p <file>   : Specify pid file.
+#    -q          : Disable interactive console
+#    -v          : Display version and exit
+
+netxmsd_debug_level=""
+if [ "$NETXMSD_DEBUG_LEVEL" -gt 0 ]; then
+    netxmsd_debug_level="-D ${NETXMSD_DEBUG_LEVEL}"
+fi
+
+exec /usr/bin/netxmsd -q ${netxmsd_debug_level} -c ${netxmsd_conf}

@@ -13,4 +13,5 @@ RUN echo 'debconf debconf/frontend select Noninteractive' | debconf-set-selectio
 COPY nxagent/docker-entrypoint.sh /
 
 RUN  chmod 755 /docker-entrypoint.sh
+
 ENTRYPOINT ["/docker-entrypoint.sh"]

@@ -1,4 +1,4 @@
-version: '2'
+version: '3'
 
 services:
   server:
@@ -12,7 +12,8 @@ services:
     ports:
     - "8080:8080"
     environment:
-    - "NETXMS_SERVER=server"
+      GMAIL_USER: "USER@gmail.com"
+      GMAIL_PASSWORD: "PASSWORD"
 
   # webuirest:
   #   image: registry.gitlab.com/matthew-beckett/netxms-dockerfiles/webuirest:3-8-314
@@ -25,6 +26,19 @@ services:
   agent:
     image: registry.gitlab.com/matthew-beckett/netxms-dockerfiles/nxagent:3-8-314
     environment:
-    - "NXAGENT_CONFIG=MasterServer=server\nLogFile=/var/log/nxagentsome.log\nEnableProxy=yes\nEnableSNMPProxy=yes"
-    - "NXAGENT_MASTERSERVERS=server"
-    - "NXAGENT_REGISTERSERVER=server"
+      NETXMSD_UNLOCK_ON_STARTUP: 1
+      NETXMSD_UPGRADE_ON_STARTUP: 1
+      NETXMSD_DEBUG_LEVEL: 0
+      NETXMSD_CONFIG: ""
+      NETXMSD_UPGRADE_PARAMS: ""
+    command: ["/wait-for", "netxms-agent:4700", "--", "./docker-entrypoint.sh"]
+    
+  netxms-webui:
+    image: frostasm/netxms-webui:latest
+    restart: unless-stopped
+    ports:
+      - "8080:8080" # http://server:8080/nxmc/nxmc
+    environment:
+      NETXMS_SERVER: "netxms-server"
+    depends_on:
+      - netxms-server
